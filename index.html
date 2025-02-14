@@ -1,0 +1,199 @@
+<!DOCTYPE html>
+<html lang="id">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Game 2 Bola Bertabrakan Halus</title>
+    <style>
+        * { margin: 0; padding: 0; box-sizing: border-box; }
+        body { background: black; overflow: hidden; }
+        canvas { display: block; position: absolute; top: 0; left: 0; }
+        h1 {
+            position: absolute;
+            width: 100%;
+            top: 20px;
+            text-align: center;
+            color: white;
+            font-size: 24px;
+            font-family: Arial, sans-serif;
+            text-shadow: 0 0 10px rgba(255, 255, 255, 0.7);
+        }
+    </style>
+</head>
+<body>
+    <h1>Seret Bola dan Saksikan Tabrakan Halus 🎱</h1>
+    <canvas id="canvas"></canvas>
+    <audio id="bounceSound" src="https://www.fesliyanstudios.com/play-mp3/6556"></audio>
+
+    <script>
+        const canvas = document.getElementById("canvas");
+        const ctx = canvas.getContext("2d");
+        const bounceSound = document.getElementById("bounceSound");
+
+        canvas.width = window.innerWidth;
+        canvas.height = window.innerHeight;
+
+        class Ball {
+            constructor(x, y, radius, color) {
+                this.x = x;
+                this.y = y;
+                this.radius = radius;
+                this.dx = Math.random() * 4 - 2;
+                this.dy = Math.random() * 4 - 2;
+                this.friction = 0.99;
+                this.elasticity = 0.9;
+                this.dragging = false;
+                this.lastX = 0;
+                this.lastY = 0;
+                this.color = color;
+                this.mass = radius; // Massa bola berdasarkan ukuran
+            }
+
+            draw() {
+                ctx.fillStyle = this.color;
+                ctx.beginPath();
+                ctx.arc(this.x, this.y, this.radius, 0, Math.PI * 2);
+                ctx.fill();
+            }
+
+            update() {
+                if (!this.dragging) {
+                    this.dx *= this.friction;
+                    this.dy *= this.friction;
+                    this.x += this.dx;
+                    this.y += this.dy;
+
+                    // Pantulan dari dinding
+                    if (this.x + this.radius > canvas.width) {
+                        this.x = canvas.width - this.radius;
+                        this.dx *= -this.elasticity;
+                        playBounceSound();
+                    } else if (this.x - this.radius < 0) {
+                        this.x = this.radius;
+                        this.dx *= -this.elasticity;
+                        playBounceSound();
+                    }
+
+                    if (this.y + this.radius > canvas.height) {
+                        this.y = canvas.height - this.radius;
+                        this.dy *= -this.elasticity;
+                        playBounceSound();
+                    } else if (this.y - this.radius < 0) {
+                        this.y = this.radius;
+                        this.dy *= -this.elasticity;
+                        playBounceSound();
+                    }
+                }
+            }
+        }
+
+        function detectCollision(ball1, ball2) {
+            let dx = ball2.x - ball1.x;
+            let dy = ball2.y - ball1.y;
+            let distance = Math.sqrt(dx * dx + dy * dy);
+
+            if (distance < ball1.radius + ball2.radius) {
+                // Hitung sudut tumbukan
+                let angle = Math.atan2(dy, dx);
+
+                // Hitung kecepatan sebelum tumbukan
+                let speed1 = Math.sqrt(ball1.dx * ball1.dx + ball1.dy * ball1.dy);
+                let speed2 = Math.sqrt(ball2.dx * ball2.dx + ball2.dy * ball2.dy);
+
+                // Arah gerak sebelum tumbukan
+                let direction1 = Math.atan2(ball1.dy, ball1.dx);
+                let direction2 = Math.atan2(ball2.dy, ball2.dx);
+
+                // Pecah kecepatan menjadi komponen sejajar dan tegak lurus tumbukan
+                let v1Parallel = speed1 * Math.cos(direction1 - angle);
+                let v2Parallel = speed2 * Math.cos(direction2 - angle);
+
+                let v1Perpendicular = speed1 * Math.sin(direction1 - angle);
+                let v2Perpendicular = speed2 * Math.sin(direction2 - angle);
+
+                // Terapkan hukum kekekalan momentum untuk arah sejajar tumbukan
+                let newV1Parallel = ((ball1.mass - ball2.mass) * v1Parallel + 2 * ball2.mass * v2Parallel) / (ball1.mass + ball2.mass);
+                let newV2Parallel = ((ball2.mass - ball1.mass) * v2Parallel + 2 * ball1.mass * v1Parallel) / (ball1.mass + ball2.mass);
+
+                // Konversi kembali ke koordinat asli
+                ball1.dx = newV1Parallel * Math.cos(angle) + v1Perpendicular * Math.cos(angle + Math.PI / 2);
+                ball1.dy = newV1Parallel * Math.sin(angle) + v1Perpendicular * Math.sin(angle + Math.PI / 2);
+
+                ball2.dx = newV2Parallel * Math.cos(angle) + v2Perpendicular * Math.cos(angle + Math.PI / 2);
+                ball2.dy = newV2Parallel * Math.sin(angle) + v2Perpendicular * Math.sin(angle + Math.PI / 2);
+
+                // Pisahkan bola agar tidak saling menempel
+                let overlap = (ball1.radius + ball2.radius - distance) / 2;
+                ball1.x -= overlap * Math.cos(angle);
+                ball1.y -= overlap * Math.sin(angle);
+                ball2.x += overlap * Math.cos(angle);
+                ball2.y += overlap * Math.sin(angle);
+
+                playBounceSound();
+            }
+        }
+
+        function playBounceSound() {
+            bounceSound.currentTime = 0;
+            bounceSound.play();
+        }
+
+        let ball1 = new Ball(canvas.width / 3, canvas.height / 2, 40, "deepskyblue");
+        let ball2 = new Ball((canvas.width * 2) / 3, canvas.height / 2, 40, "red");
+
+        let balls = [ball1, ball2];
+
+        function animate() {
+            ctx.clearRect(0, 0, canvas.width, canvas.height);
+            balls.forEach(ball => ball.update());
+            detectCollision(ball1, ball2);
+            balls.forEach(ball => ball.draw());
+            requestAnimationFrame(animate);
+        }
+
+        function startDrag(e) {
+            let touchX = e.clientX || e.touches[0].clientX;
+            let touchY = e.clientY || e.touches[0].clientY;
+
+            balls.forEach(ball => {
+                let dist = Math.sqrt((touchX - ball.x) ** 2 + (touchY - ball.y) ** 2);
+                if (dist < ball.radius) {
+                    ball.dragging = true;
+                    ball.lastX = touchX;
+                    ball.lastY = touchY;
+                }
+            });
+        }
+
+        function dragBall(e) {
+            let touchX = e.clientX || e.touches[0].clientX;
+            let touchY = e.clientY || e.touches[0].clientY;
+
+            balls.forEach(ball => {
+                if (ball.dragging) {
+                    ball.dx = (touchX - ball.lastX) * 0.5;
+                    ball.dy = (touchY - ball.lastY) * 0.5;
+                    ball.x = touchX;
+                    ball.y = touchY;
+                    ball.lastX = touchX;
+                    ball.lastY = touchY;
+                }
+            });
+        }
+
+        function stopDrag() {
+            balls.forEach(ball => (ball.dragging = false));
+        }
+
+        canvas.addEventListener("mousedown", startDrag);
+        canvas.addEventListener("mousemove", dragBall);
+        canvas.addEventListener("mouseup", stopDrag);
+
+        canvas.addEventListener("touchstart", startDrag);
+        canvas.addEventListener("touchmove", dragBall);
+        canvas.addEventListener("touchend", stopDrag);
+
+        animate();
+    </script>
+</body>
+</html>
